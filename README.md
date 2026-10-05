@@ -1,14 +1,12 @@
 # Verilog-A Models for MAGIC Memristive Crossbars
 
-Verilog-A device models I use to simulate **MAGIC (Memristor-Aided loGIC)** NOR/NOT gates, adders and multipliers on memristive crossbars in **Cadence Spectre/Virtuoso** and **ngspice (OSDI)**.
+Verilog-A memristor models I use to simulate **MAGIC (Memristor-Aided loGIC)** NOR/NOT gates, adders and multipliers on memristive crossbars in **Cadence Spectre/Virtuoso** and **ngspice (OSDI)**.
 
 ## Files
 | File | What it is |
 |---|---|
 | `veriloga/vteam_fixed.va` | VTEAM memristor (Biolek window, p = 2) with the state integrated by the simulator. **Use this one.** |
 | `veriloga/vteam_technion_original.va` | Original VTEAM Verilog-A model from the Technion (Kvatinsky group), unmodified, kept for reference |
-| `veriloga/line_driver.va` | Tri-state driver for crossbar rows/columns: drives a voltage when enabled, floats the line when disabled |
-| `veriloga/access_switch.va` | Ideal access transistor for 1T1R cells (swap for a PDK NMOS in final runs) |
 
 ## Why `vteam_fixed.va`
 The original model updates the state as `x = x_last + dt*dxdt` once per model evaluation. Spectre evaluates a model several times per timestep (Newton iterations, rejected steps), so the switching time depends on `maxstep`/`reltol`.
@@ -34,10 +32,9 @@ The original model updates the state as `x = x_last + dt*dxdt` once per model ev
 
 **Cadence Virtuoso / Spectre**
 1. In your library, create a cell `vteam_fixed` → **File → New → Cellview**, type **VerilogA**. Paste `vteam_fixed.va` and save. Virtuoso compiles it and offers to create a symbol; accept.
-2. Do the same for `line_driver` and `access_switch` if you need them.
-3. Place the memristor symbol in your schematic. Set `init_state` per instance: 0 for logic 1 (Ron), 1 for logic 0 (Roff).
-4. ADE → **Transient**. For MAGIC steps of a few ns, a `maxstep` of 10 ps is a good start.
-5. Plot `w` to watch each memristor switch, and the branch current to measure energy.
+2. Place the memristor symbol in your schematic. Set `init_state` per instance: 0 for logic 1 (Ron), 1 for logic 0 (Roff).
+3. ADE → **Transient**. For MAGIC steps of a few ns, a `maxstep` of 10 ps is a good start.
+4. Plot `w` to watch each memristor switch, and the branch current to measure energy.
 
 **Spectre netlist (text)**
 ```
