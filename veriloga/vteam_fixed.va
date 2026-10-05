@@ -1,0 +1,69 @@
+// ============================================================================
+// VTEAM memristor - timestep-independent Verilog-A (Spectre / ngspice-OSDI)
+//
+// Same equations as the Technion model (model=4, window_type=2 Biolek,
+// IV_relation=0) used by Srinivasu et al., but the state x/D is stored on an
+// internal node and integrated by the SIMULATOR (ddt), instead of the manual
+// "x = x_last + dt*dxdt" update of the original file.
+//
+// Why: the original advances the state once per *model evaluation*. Spectre
+// evaluates a model several times per timestep (Newton iterations, rejected
+// steps), so the switching time depends on maxstep/reltol. That is a likely
+// reason a simulated MAGIC NOR delay (1.56 ns) can differ from the published 1.3 ns.
+//
+// Ports : p (thick-line / row side), n (column side), w (state x/D, 0..1 V)
+// Logic : x/D = 0 -> Ron (logic 1) ; x/D = 1 -> Roff (logic 0)
+//         V(p,n) > v_off -> RESET (towards Roff) ; V(p,n) < v_on -> SET
+// ============================================================================
+`include "constants.vams"
+`include "disciplines.vams"
+
+module vteam_fixed(p, n, w);
+  inout p, n;
+  output w;
+  electrical p, n, w;
+  electrical xs;                       // internal state node (volts == x/D)
+
+  parameter real Ron        = 1e3;
+  parameter real Roff       = 300e3;
+  parameter real k_on       = -216.2;  // m/s
+  parameter real k_off      = 0.091;   // m/s
+  parameter real alpha_on   = 4;
+  parameter real alpha_off  = 4;
+  parameter real v_on       = -1.5;    // V
+  parameter real v_off      = 0.3;     // V
+  parameter real D          = 3e-9;    // m   (paper Table V lists x_off = 2 nm)
+  parameter real init_state = 1.0;     // 0 = Ron/logic1, 1 = Roff/logic0
+  parameter real g_hold     = 1e-6;    // only sets the DC operating point of xs
+
+  real v, wv, wc, dxdt, f, t1, t2, R;
+
+  analog begin
+    v  = V(p, n);
+    wv = V(xs);
+    wc = min(max(wv, 0.0), 1.0);
+
+    if (v >= v_off)
+      dxdt = k_off * pow(v / v_off - 1.0, alpha_off);
+    else if (v <= v_on)
+      dxdt = k_on  * pow(v / v_on  - 1.0, alpha_on);
+    else
+      dxdt = 0.0;
+
+    // Biolek window, p = 2 :  f = 1 - (x/D - stp(-v))^4
+    if (v <= 0.0) t1 = wv - 1.0; else t1 = wv;
+    t2 = t1 * t1;
+    f  = 1.0 - t2 * t2;
+
+    // d(x/D)/dt = dxdt*f/D   (1 F "capacitor" on xs).
+    // g_hold*(V(xs)-init_state): pins xs = init_state at the DC operating
+    // point; its time constant (1e6 s) is irrelevant during transient.
+    I(xs) <+ ddt(V(xs));
+    I(xs) <+ -dxdt * f / D;
+    I(xs) <+ g_hold * (V(xs) - init_state);
+
+    R = Ron + (Roff - Ron) * wc;
+    I(p, n) <+ V(p, n) / R;
+    V(w)    <+ wc;
+  end
+endmodule
